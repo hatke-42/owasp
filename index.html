@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive OWASP Top 10 2021 Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Chosen Palette: Warm Neutrals -->
+    <!-- Application Structure Plan: A responsive, dashboard-style single-page application. A fixed vertical navigation on the left lists the 10 OWASP vulnerabilities, allowing users to switch between them. The main content area on the right dynamically displays detailed information for the selected vulnerability. This content is organized into tabs (Overview, Risks, Attacks, Case Studies, Prevention, CWEs) to make the dense information digestible and prevent overwhelming the user. This non-linear, interactive structure was chosen to transform the static report into an engaging learning tool, allowing users to explore risks based on their interests rather than following a rigid chapter order. -->
+    <!-- Visualization & Content Choices: 
+        - Report Info: Overall vulnerability prevalence/test coverage. Goal: Compare. Viz/Method: Bar Chart (Chart.js/Canvas). Interaction: Hover tooltips. Justification: Provides a high-level, easily comparable visual summary of the risks.
+        - Report Info: Key statistics for each vulnerability. Goal: Inform. Viz/Method: Prominent stat cards (HTML/Tailwind). Interaction: Static. Justification: Highlights the most impactful data points for quick consumption.
+        - Report Info: Detailed vulnerability descriptions, attack methods, prevention strategies, case studies, and risks. Goal: Organize & Inform. Viz/Method: Tabbed interface and accordions (HTML/Tailwind/JS). Interaction: Click to switch tabs/expand content. Justification: Breaks down complex information into manageable, user-controlled sections, preventing a "wall of text" and improving readability.
+        - Report Info: Associated CWEs with descriptions. Goal: Organize. Viz/Method: Styled HTML table. Interaction: Static. Justification: Presents structured data clearly and efficiently.
+        - CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #fdfcfb;
+            color: #333;
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 900px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 400px;
+            max-height: 50vh;
+        }
+        @media (max-width: 768px) {
+            .chart-container {
+                height: 300px;
+                max-height: 60vh;
+            }
+        }
+        .nav-item.active {
+            background-color: #eaddd7;
+            color: #5c3c2a;
+            font-weight: 600;
+        }
+        .tab-item.active {
+            border-bottom-color: #a3785f;
+            color: #a3785f;
+            font-weight: 600;
+        }
+        .accordion-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease-out;
+        }
+    </style>
+</head>
+<body class="antialiased">
+
+    <div class="flex flex-col md:flex-row min-h-screen">
+        <aside class="w-full md:w-64 bg-[#f4f1ee] border-r border-[#eaddd7] p-4 md:fixed md:h-full">
+            <div class="flex justify-between items-center mb-4">
+                 <h1 class="text-xl font-bold text-[#5c3c2a]">OWASP Top 10</h1>
+                 <button id="welcome-btn" class="text-sm font-medium text-[#7a5f51] hover:text-[#5c3c2a]">Home</button>
+            </div>
+            <nav id="navigation" class="flex flex-row md:flex-col overflow-x-auto md:overflow-x-visible pb-2 md:pb-0">
+            </nav>
+        </aside>
+
+        <main id="main-content" class="flex-1 md:ml-64 p-4 md:p-8">
+        </main>
+    </div>
+
+    <script>
+        const owaspData = {
+            "A01": {
+                title: "Broken Access Control",
+                incidence: 94,
+                overview: "Topping the list, Broken Access Control moves up from the fifth position. It refers to failures in enforcing restrictions on what authenticated users are allowed to do. These flaws allow users to access unauthorized functionality or data, such as accessing other users' accounts, viewing sensitive files, modifying other users' data, or changing access rights. 94% of applications were tested for some form of broken access control, making it the most prevalent category.",
+                risks: [
+                    "Unauthorized disclosure of sensitive information.",
+                    "Modification or destruction of data.",
+                    "Performing business functions outside of the user's limits.",
+                    "Complete takeover of another user's account or even site administration."
+                ],
+                attacks: [
+                    { title: "Path Traversal / Forced Browsing", description: "An attacker manipulates a URL or API request to access resources they shouldn't be able to, like `https://example.com/app/get_invoice?id=123` to `https://example.com/app/admin/dashboard`." },
+                    { title: "Privilege Escalation", description: "A user acting without admin privileges is able to execute admin functionality. For example, accessing an admin API endpoint (`/api/v1/users/deleteUser`) that lacks a server-side permission check." },
+                    { title: "Insecure Direct Object References (IDOR)", description: "An attacker simply changes an ID parameter in a URL (e.g., `?invoice=123` to `?invoice=124`) to access another user's data because the server doesn't verify ownership of the record." },
+                    { title: "CORS Misconfiguration", description: "A misconfigured Cross-Origin Resource Sharing (CORS) policy allows a malicious website to make requests to the application on behalf of the user, potentially accessing sensitive data." }
+                ],
+                caseStudies: [
+                    { title: "Peloton API Vulnerability (2021)", description: "A security researcher discovered that Peloton's API allowed any authenticated user to access the private user data (age, weight, location, workout stats) of any other user by making a direct, unauthenticated request to the API endpoints. This was a classic case of missing authorization checks, a core tenet of Broken Access Control." },
+                    { title: "Facebook View As Feature Bug (2018)", description: "A complex interaction between three distinct bugs allowed attackers to exploit Facebook's 'View As' feature to obtain access tokens for other users. This token could then be used to take over accounts. While complex, the root cause was a failure to correctly enforce access control rules within their own code, leading to a breach affecting 50 million accounts." }
+                ],
+                prevention: [
+                    "Implement access control mechanisms once and re-use them throughout the application, preferably in a centralized, single location.",
+                    "Deny by default. Access control should only grant access to specific roles for specific functions.",
+                    "Enforce record ownership, so users can only perform actions on records they own. Never trust user-supplied IDs without server-side verification.",
+                    "Log access control failures and alert administrators to repeated failures, which could indicate an attack in progress.",
+                    "Rate limit API and controller access to minimize the harm from automated attack tooling.",
+                    "Invalidate session tokens on logout and when JWTs are no longer valid."
+                ],
+                cwes: [
+                    { id: "CWE-22", name: "Path Traversal", description: "The application uses external input to construct a pathname that should be within a restricted directory, but it does not properly neutralize sequences that can resolve to locations outside of that directory." },
+                    { id: "CWE-284", name: "Improper Access Control", description: "A generic CWE for when the software does not restrict or incorrectly restricts access to a resource from an unauthorized actor." },
+                    { id: "CWE-639", name: "Authorization Bypass Through User-Controlled Key", description: "The application uses a user-controllable key or identifier to access resources, but it does not verify that the user is authorized for the requested resource (classic IDOR)." }
+                ]
+            },
+            "A02": {
+                title: "Cryptographic Failures",
+                incidence: 90,
+                overview: "Previously 'Sensitive Data Exposure,' this category now focuses on failures related to cryptography (or lack thereof). It highlights weaknesses in protecting data in transit and at rest, such as transmitting data in cleartext, using old or weak cryptographic algorithms, poor key management, or using unsalted hashes to store passwords.",
+                risks: [
+                    "Data breaches leading to financial loss, identity theft, and fraud.",
+                    "Severe regulatory fines under GDPR, HIPAA, and PCI DSS.",
+                    "Irreparable reputational damage and loss of customer trust.",
+                    "System compromise if credentials or API keys are exposed."
+                ],
+                attacks: [
+                    { title: "Man-in-the-Middle (MITM) Attack", description: "An attacker on an insecure network intercepts traffic sent over unencrypted HTTP to steal session cookies or credentials." },
+                    { title: "Offline Password Cracking", description: "After obtaining a database of user credentials, an attacker uses rainbow tables or GPUs to crack passwords stored with weak or unsalted hashing algorithms like MD5 or SHA-1." },
+                    { title: "Hardcoded Key Exploitation", description: "An attacker finds an encryption key hardcoded in the application's source code and uses it to decrypt sensitive data or forge authentication tokens." },
+                    { title: "Padding Oracle Attack", description: "An advanced attack that exploits information leakage from error messages to decrypt ciphertext one byte at a time without knowing the encryption key." }
+                ],
+                caseStudies: [
+                    { title: "Heartbleed Vulnerability (2014)", description: "A severe implementation flaw in the OpenSSL library allowed attackers to read server memory, exposing private keys, session cookies, and user credentials. This was a failure in the implementation of the cryptographic software itself, demonstrating that even strong algorithms are useless if coded incorrectly." },
+                    { title: "Exactis Data Exposure (2018)", description: "A marketing firm exposed a database with 340 million records on a public server without any firewall or authentication. This is a textbook failure to protect data at rest, where the most basic cryptographic control—access control—was completely absent." }
+                ],
+                prevention: [
+                    "Classify data and encrypt all sensitive data at rest using strong, modern algorithms like AES-256.",
+                    "Encrypt all data in transit using secure protocols like TLS 1.2+ with strong ciphers and forward secrecy. Enforce this with HSTS.",
+                    "Use strong, salted, and adaptive hashing functions like Argon2, scrypt, or bcrypt for storing passwords.",
+                    "Implement a secure key management process using a KMS or HSM; never hardcode keys.",
+                    "Disable caching on server responses that contain sensitive data."
+                ],
+                cwes: [
+                    { id: "CWE-327", name: "Use of a Broken or Risky Cryptographic Algorithm", description: "The application uses a cryptographic algorithm or protocol that is known to be weak, deprecated, or insecure (e.g., MD5, SHA-1, DES)." },
+                    { id: "CWE-312", name: "Cleartext Storage of Sensitive Information", description: "Sensitive information, such as passwords or PII, is stored in a non-encrypted format." },
+                    { id: "CWE-319", name: "Cleartext Transmission of Sensitive Information", description: "Sensitive information is sent over the network without encryption, making it vulnerable to interception." }
+                ]
+            },
+            "A03": {
+                title: "Injection",
+                incidence: 94,
+                overview: "Injection flaws, which now include Cross-Site Scripting (XSS), occur when untrusted data is sent to an interpreter as part of a command or query. This tricks the interpreter into executing unintended commands or accessing data without proper authorization. 94% of applications were tested for some form of injection.",
+                risks: [
+                    "Complete system compromise through OS Command Injection.",
+                    "Massive data breaches via SQL Injection, exfiltrating entire databases.",
+                    "Session hijacking and credential theft through Cross-Site Scripting.",
+                    "Denial of Service by corrupting or deleting data."
+                ],
+                attacks: [
+                    { title: "SQL Injection (SQLi)", description: "An attacker provides input like `' OR 1=1 --` in a login form to bypass authentication checks by manipulating the backend SQL query." },
+                    { title: "Cross-Site Scripting (XSS)", description: "An attacker injects a malicious script into a website's comment section. When other users view the comment, the script executes in their browser, stealing their session cookies." },
+                    { title: "OS Command Injection", description: "An attacker provides input like `example.com; rm -rf /` to a feature that uses a system shell, causing the server to execute the malicious command." },
+                    { title: "LDAP Injection", description: "Similar to SQLi, this attack targets applications that construct LDAP queries from user input, potentially leading to authentication bypass or information disclosure." }
+                ],
+                caseStudies: [
+                    { title: "Equifax Data Breach (2017)", description: "While initiated through a vulnerable component, the attackers used OS Command Injection to execute commands on the server. This injection capability was the key that unlocked the internal network, enabling attackers to move laterally and ultimately exfiltrate the personal data of over 143 million people." },
+                    { title: "British Airways XSS Attack (2018)", description: "Attackers exploited an XSS vulnerability in a third-party JavaScript library on the British Airways website to inject a credit card skimming script. The script stole the financial details of approximately 380,000 customers during the checkout process." }
+                ],
+                prevention: [
+                    "The primary defense is to keep untrusted data separate from commands and queries.",
+                    "Use server-side parameterized queries (prepared statements) to prevent SQL injection.",
+                    "Use context-aware output encoding/escaping on all user-supplied data to prevent XSS. Implement a strong Content Security Policy (CSP) as a defense-in-depth measure.",
+                    "Avoid calling OS interpreters directly. Use built-in platform APIs instead.",
+                    "Implement positive server-side input validation (allow-lists)."
+                ],
+                cwes: [
+                    { id: "CWE-89", name: "SQL Injection", description: "The application constructs a SQL query using untrusted input without proper sanitization, allowing an attacker to alter the query's logic." },
+                    { id: "CWE-79", name: "Cross-site Scripting", description: "The application includes untrusted data in a new web page without proper encoding, causing it to be executed as script in the user's browser." },
+                    { id: "CWE-78", name: "OS Command Injection", description: "The application constructs an OS command using untrusted input, allowing an attacker to execute arbitrary system commands." }
+                ]
+            },
+             "A04": {
+                title: "Insecure Design",
+                incidence: 86,
+                overview: "A new category for 2021, Insecure Design focuses on risks related to design and architectural flaws. It represents missing or ineffective security controls that cannot be fixed by a perfect implementation. This category calls for more threat modeling, secure design patterns, and a 'shift left' security mindset.",
+                risks: [
+                    "Systemic vulnerabilities that are expensive and difficult to fix, often requiring a complete redesign.",
+                    "Direct financial loss through the abuse of flawed business logic.",
+                    "Severe reputational damage when customer-facing processes fail (e.g., scalper bots buying all inventory).",
+                    "Creation of a vulnerable ecosystem where other flaws like Injection or Broken Access Control can thrive."
+                ],
+                attacks: [
+                    { title: "Credential Stuffing", description: "An application is designed without rate limiting on its login page, allowing an attacker to use automated tools to try millions of stolen credentials from other breaches." },
+                    { title: "Business Logic Abuse", description: "An attacker exploits a flaw in a checkout process design to apply unlimited discounts or order items without completing payment." },
+                    { title: "Bypassed UI Controls", description: "A design relies on the user interface to hide an admin link, but the backend API for that function lacks its own permission check, allowing direct access." }
+                ],
+                caseStudies: [
+                    { title: "Mirai Botnet and IoT Devices", description: "The rise of the Mirai botnet was a direct result of an industry-wide insecure design pattern. IoT device manufacturers designed their products with hardcoded, well-known default credentials (e.g., admin/admin). This design choice, made for ease of setup, made the devices trivially easy to compromise and enlist into a botnet." },
+                    { title: "Equifax and Lack of Network Segmentation", description: "The 2017 Equifax breach was greatly exacerbated by insecure network design. A secure design would have implemented robust network segmentation to isolate critical backend systems. The lack of segmentation allowed attackers to move laterally from one compromised server to dozens of other systems, leading to the catastrophic loss of data." }
+                ],
+                prevention: [
+                    "Establish and use a secure development lifecycle (SDLC) with AppSec professionals.",
+                    "Use threat modeling for critical authentication, access control, and business logic flows to identify design flaws before they are built.",
+                    "Use secure design patterns and pre-vetted, reusable components to build on a trusted foundation.",
+                    "Design systems with strong logical and network segregation to limit the 'blast radius' of a potential breach.",
+                    "Develop and test misuse and abuse cases alongside standard functional use cases."
+                ],
+                cwes: [
+                    { id: "CWE-522", name: "Insufficiently Protected Credentials", description: "The design of the application fails to adequately protect credentials, for example, by specifying they be stored in plaintext or with weak hashing." },
+                    { id: "CWE-840", name: "Business Logic Errors", description: "The application's design contains flaws in its business logic or workflow that can be exploited to achieve an unintended outcome." },
+                    { id: "CWE-602", name: "Client-Side Enforcement of Server-Side Security", description: "The design relies on client-side controls to enforce security, which can be easily bypassed by an attacker who modifies the client." }
+                ]
+            },
+            "A05": {
+                title: "Security Misconfiguration",
+                incidence: 90,
+                overview: "Moving up from #6, this category includes incorrectly configured security controls or the failure to implement them. This can include insecure default configurations, incomplete hardening, open cloud storage, misconfigured HTTP headers, and verbose error messages containing sensitive information.",
+                risks: [
+                    "Data breaches and sensitive information exposure, especially from misconfigured cloud services.",
+                    "Complete system compromise via default credentials or unpatched systems.",
+                    "Service disruption and website defacement.",
+                    "Significant regulatory fines, as misconfigurations are often seen as a failure of due care."
+                ],
+                attacks: [
+                    { title: "Default Credential Exploitation", description: "An attacker finds a new server and logs in with default admin credentials (e.g., admin/password) found in the vendor's documentation." },
+                    { title: "Public Cloud Storage Exposure", description: "An employee misconfigures an S3 bucket to be publicly readable, allowing an attacker to discover and download all the sensitive data stored within it." },
+                    { title: "Information Leakage via Errors", description: "A malformed request causes the server to return a detailed stack trace, revealing the exact framework version, which an attacker then exploits using a known vulnerability." },
+                    { title: "XML External Entity (XXE) Attack", description: "An XML parser is misconfigured to process external entity references, allowing an attacker to read local files or perform network scanning." }
+                ],
+                caseStudies: [
+                    { title: "Capital One Data Breach (2019)", description: "While initiated via SSRF, the breach was fundamentally enabled by a security misconfiguration. An overly permissive IAM role assigned to the compromised server allowed the attacker to list and access S3 buckets containing over 100 million customer records. This highlights the devastating impact of misconfigured cloud permissions." },
+                    { title: "Accenture Cloud Storage Leak (2017)", description: "The consulting giant Accenture left at least four unsecured Amazon S3 servers publicly accessible. These servers contained master access keys, passwords, and confidential client data. The misconfiguration was a simple failure to set the correct permissions on the S3 buckets." }
+                ],
+                prevention: [
+                    "Implement a repeatable, automated hardening process for all environments.",
+                    "Use a minimalist platform; remove or do not install unused features, services, and frameworks.",
+                    "Use Cloud Security Posture Management (CSPM) tools to continuously scan for misconfigurations in cloud environments.",
+                    "Ensure the web server is configured to send appropriate security headers like Content-Security-Policy and HSTS.",
+                    "Regularly scan and audit all environments for misconfigurations and use of default accounts."
+                ],
+                cwes: [
+                    { id: "CWE-16", name: "Configuration", description: "A category for weaknesses related to the configuration of the software and its environment, including insecure defaults and improper permissions." },
+                    { id: "CWE-548", name: "Exposure of Information Through Directory Listing", description: "The web server is configured to show the contents of a directory when no index file is present, potentially exposing sensitive files." },
+                    { id: "CWE-611", name: "XML External Entity Reference ('XXE')", description: "An XML parser is configured to process external entity references from untrusted sources, which can lead to the disclosure of internal files." }
+                ]
+            },
+            "A06": {
+                title: "Vulnerable and Outdated Components",
+                incidence: 89,
+                overview: "Previously 'Using Components with Known Vulnerabilities,' this category addresses the risk of using unsupported or outdated software, including the OS, web server, DBMS, APIs, and all third-party libraries. Applications inherit the security posture of every component they use.",
+                risks: [
+                    "Widespread system compromise from a single vulnerability in a common component (e.g., Log4Shell, Struts).",
+                    "Large-scale data breaches when attackers exploit known flaws.",
+                    "Software supply chain attacks where attackers inject malicious code into a popular open-source package.",
+                    "Compliance violations for failing to meet mandated patching timelines."
+                ],
+                attacks: [
+                    { title: "Exploitation of a Known RCE Vulnerability", description: "An attacker discovers an application is using a vulnerable version of Apache Struts 2 and uses a public exploit to gain remote code execution on the server." },
+                    { title: "Data Exfiltration via a Vulnerable Library", description: "An application uses an outdated data serialization library with a known deserialization vulnerability, allowing an attacker to execute code and exfiltrate data." },
+                    { title: "Session Hijacking via Outdated JavaScript", description: "A website uses an old, vulnerable version of jQuery with a known XSS flaw, which an attacker exploits to steal user session cookies." }
+                ],
+                caseStudies: [
+                    { title: "Equifax Data Breach (2017)", description: "Equifax's web application was built using a vulnerable version of Apache Struts 2. A patch was available but Equifax failed to apply it. Two months later, attackers exploited this exact vulnerability to gain initial access, leading to the breach of 148 million consumer records." },
+                    { title: "Log4Shell (2021)", description: "A critical RCE vulnerability was discovered in Apache Log4j, a nearly universal Java logging library. The vulnerability was trivial to exploit, creating a global security crisis as teams scrambled to find and patch every instance of the vulnerable library across their entire software estate." }
+                ],
+                prevention: [
+                    "Maintain a complete component inventory, or Software Bill of Materials (SBOM).",
+                    "Use automated Software Composition Analysis (SCA) tools in the CI/CD pipeline to identify vulnerable components.",
+                    "Implement a robust patch management process to apply updates in a timely manner.",
+                    "Remove unused dependencies, unnecessary features, and files.",
+                    "Only obtain components from official sources over secure links. Verify signatures where possible."
+                ],
+                cwes: [
+                    { id: "CWE-1104", name: "Use of Unmaintained Third-Party Components", description: "The application uses a third-party component that is no longer supported or maintained by its developer, meaning new security vulnerabilities will not be patched." },
+                    { id: "CWE-937", name: "Using Components with Known Vulnerabilities", description: "The general category for the risk of using components with known security flaws." }
+                ]
+            },
+            "A07": {
+                title: "Identification and Authentication Failures",
+                incidence: 86,
+                overview: "Previously 'Broken Authentication,' this category encompasses weaknesses in user identity confirmation, authentication, and session management. These flaws can allow attackers to compromise passwords, keys, or session tokens, or to assume other users' identities.",
+                risks: [
+                    "Unauthorized access and account takeover, especially of privileged admin accounts.",
+                    "Data breaches, as over 80% of breaches are attributed to stolen or weak credentials.",
+                    "Financial fraud through compromised e-commerce or banking accounts.",
+                    "Severe reputational damage when a service cannot protect its users' accounts."
+                ],
+                attacks: [
+                    { title: "Credential Stuffing", description: "An attacker uses lists of credentials from other breaches to attempt logins, succeeding because users reuse passwords." },
+                    { title: "Brute-Force Attack", description: "An attacker targets a specific user account and systematically tries thousands of common passwords from a dictionary list." },
+                    { title: "Session Hijacking", description: "An attacker uses a public computer and finds they are still logged into the previous user's session because the session did not properly expire on logout." },
+                    { title: "Session Fixation", description: "An attacker forces a user to use a session ID known to the attacker. After the user logs in, the attacker can use that same session ID to access the authenticated session." }
+                ],
+                caseStudies: [
+                    { title: "Disney+ Credential Stuffing Attack (2019)", description: "Shortly after the launch of Disney+, thousands of user accounts were compromised via credential stuffing attacks. The immediate success of this attack suggests a lack of robust defenses against automated login attempts at launch." }
+                ],
+                prevention: [
+                    "Implement multi-factor authentication (MFA) wherever possible.",
+                    "Enforce strong password policies aligned with modern standards (NIST 800-63B), including checking against breached password lists.",
+                    "Protect against automated attacks with rate limiting, CAPTCHAs, and account lockout mechanisms.",
+                    "Use a server-side, built-in session manager that generates a new, random session ID after login. Invalidate sessions on logout and after timeouts.",
+                    "Harden credential recovery processes; do not use knowledge-based 'security questions'."
+                ],
+                cwes: [
+                    { id: "CWE-287", name: "Improper Authentication", description: "The application does not perform or incorrectly performs a check for a user's identity, allowing an attacker to bypass authentication." },
+                    { id: "CWE-307", name: "Improper Restriction of Excessive Authentication Attempts", description: "The application fails to limit the number of failed login attempts, making it vulnerable to brute-force attacks." },
+                    { id: "CWE-384", name: "Session Fixation", description: "An attacker can force a user's session to an explicit value, allowing them to hijack the validated session after the user logs in." }
+                ]
+            },
+            "A08": {
+                title: "Software and Data Integrity Failures",
+                incidence: 83,
+                overview: "A new category focusing on failures related to code and infrastructure that do not protect against integrity violations. This includes vulnerabilities from insecure CI/CD pipelines, unverified software updates, and insecure deserialization, where an application blindly trusts tampered data.",
+                risks: [
+                    "Widespread system compromise via a supply chain attack, turning a product into a malware distribution vector.",
+                    "Data breaches, espionage, or ransomware deployment through injected code.",
+                    "Catastrophic loss of trust and reputational damage.",
+                    "High financial costs for incident response and remediation across thousands of affected customers."
+                ],
+                attacks: [
+                    { title: "Malicious Software Update", description: "An attacker compromises an update server and replaces a legitimate update with a malicious one. The application installs it without verifying its digital signature." },
+                    { title: "CI/CD Pipeline Compromise", description: "An attacker injects malicious code into a build script. The resulting application artifact, now containing a backdoor, is automatically signed and deployed to production." },
+                    { title: "Remote Code Execution via Insecure Deserialization", description: "An attacker crafts a malicious serialized object and sends it to the server. When the server deserializes the object, the attacker's code is executed, often leading to RCE." }
+                ],
+                caseStudies: [
+                    { title: "SolarWinds Orion Breach (2020)", description: "This is the quintessential example of this category. Nation-state attackers compromised SolarWinds' software build process and injected a backdoor into a legitimate update. This trojanized update was then digitally signed and distributed to over 18,000 customers, including major corporations and U.S. government agencies." },
+                    { title: "Codecov Bash Uploader Compromise (2021)", description: "Attackers modified a Bash script used by thousands of customers in their CI/CD workflows. The modified script exfiltrated sensitive environment variables (like credentials and tokens) from customers' build environments, which the attackers then used to gain access to their systems." }
+                ],
+                prevention: [
+                    "Use digital signatures to verify the source and integrity of all software updates and libraries.",
+                    "Secure the CI/CD pipeline with strong access controls, segregation, and configuration hardening.",
+                    "Verify dependencies using SCA tools and consume them only from trusted, official repositories.",
+                    "Avoid deserializing data from untrusted sources. If necessary, use strict type constraints and integrity checks on the serialized data.",
+                    "Use file integrity monitoring (FIM) on critical systems to detect unauthorized changes."
+                ],
+                cwes: [
+                    { id: "CWE-502", name: "Deserialization of Untrusted Data", description: "The application deserializes data from an untrusted source without sufficiently verifying that the resulting data will be safe, leading to RCE or DoS." },
+                    { id: "CWE-494", name: "Download of Code Without Integrity Check", description: "The application downloads code or updates from a remote source but does not verify the integrity of the code before executing it." },
+                    { id: "CWE-829", name: "Inclusion of Functionality from Untrusted Control Sphere", description: "The application includes and trusts functionality (e.g., a library) from an untrusted source, making it vulnerable to any flaws in that functionality." }
+                ]
+            },
+            "A09": {
+                title: "Security Logging and Monitoring Failures",
+                incidence: 75,
+                overview: "Previously 'Insufficient Logging & Monitoring,' this category is about the failure to detect, respond to, and analyze security incidents. Without adequate logging and monitoring, breaches cannot be detected in a timely manner, allowing attackers to operate undetected for long periods.",
+                risks: [
+                    "Increased breach 'dwell time,' giving attackers months to operate undetected.",
+                    "Inability to perform incident response and forensics, making it impossible to determine the scope of a breach.",
+                    "Compliance and legal failures under regulations that mandate logging and breach notification.",
+                    "Complete erosion of trust when a company cannot explain how a breach occurred."
+                ],
+                attacks: [
+                    { title: "Undetected Brute-Force", description: "An attacker performs a very slow brute-force attack over many days. The lack of centralized logging and correlation means the ongoing attack is never detected." },
+                    { title: "Prolonged Data Exfiltration", description: "Due to insufficient internal monitoring, attackers move laterally through a network for months, slowly exfiltrating terabytes of data without triggering any alerts." },
+                    { title: "Covering Tracks", description: "An attacker gains admin access and their first action is to disable or delete local log files, erasing all evidence of their activity because logs were not shipped to a secure, remote server." }
+                ],
+                caseStudies: [
+                    { title: "Equifax Data Breach (2017)", description: "A central failure in the Equifax breach was the lack of monitoring. Attackers were active inside the network for 76 days before detection. A key factor was an expired SSL certificate on an internal security device, which meant encrypted traffic was not being inspected for over 10 months, creating a massive blind spot." },
+                    { title: "Target Data Breach (2013)", description: "In the massive Target breach, the company's security monitoring tools actually did generate alerts about the malware and data exfiltration. However, due to ineffective incident response processes and alert fatigue, the security team did not act on these critical alerts." }
+                ],
+                prevention: [
+                    "Ensure all login, access control failures, and server-side input validation failures are logged with sufficient user context.",
+                    "Implement a centralized logging solution (e.g., SIEM) to aggregate logs from all systems in near real-time.",
+                    "Store logs in a secure, centralized, and immutable (append-only) repository.",
+                    "Establish an effective monitoring and alerting system to detect and respond to suspicious activities.",
+                    "Develop and regularly practice an incident response plan."
+                ],
+                cwes: [
+                    { id: "CWE-778", name: "Insufficient Logging", description: "The application does not record security-relevant events, making it difficult or impossible to detect attacks or perform forensic analysis." },
+                    { id: "CWE-223", name: "Omission of Security-relevant Information", description: "The application logs events but omits critical details (like source IP or user ID) that are necessary to understand the event's context." },
+                    { id: "CWE-532", name: "Insertion of Sensitive Information into Log File", description: "The application writes sensitive data, such as passwords or PII, into a log file, creating a new risk of data exposure." }
+                ]
+            },
+            "A10": {
+                title: "Server-Side Request Forgery (SSRF)",
+                incidence: 80,
+                overview: "A new category added from the community survey, SSRF flaws occur when a web application fetches a remote resource using a user-supplied URL without proper validation. This allows an attacker to coerce the server into sending requests to arbitrary destinations, often to scan internal networks or access cloud metadata.",
+                risks: [
+                    "Bypassing of firewalls and other perimeter security controls.",
+                    "Exposure of sensitive data from internal services, local files, or cloud metadata endpoints.",
+                    "Internal network reconnaissance, allowing attackers to map internal systems.",
+                    "Full system compromise by chaining SSRF with another vulnerability on an internal service."
+                ],
+                attacks: [
+                    { title: "Cloud Metadata Theft", description: "An attacker uses an SSRF flaw to make the server request `http://169.254.169.254`, the AWS metadata service, stealing temporary credentials and gaining access to the cloud account." },
+                    { title: "Internal Port Scanning", description: "An attacker uses SSRF to send requests to internal IPs on various ports (e.g., `http://10.0.0.1:8080`), mapping the internal network by observing response times and errors." },
+                    { title: "Accessing Internal, Unauthenticated Services", description: "An attacker uses SSRF to connect to internal services like admin panels or monitoring dashboards that are running without authentication." },
+                    { title: "Reading Local Files", description: "By using the `file://` URL scheme, an attacker may be able to trick the server into reading arbitrary files from its own file system." }
+                ],
+                caseStudies: [
+                    { title: "Capital One Data Breach (2019)", description: "This is the most well-known breach attributed to SSRF. The attacker exploited an SSRF vulnerability in a WAF to force the server to request credentials from the EC2 metadata service. These stolen credentials were then used to access and exfiltrate over 100 million customer records from S3." },
+                    { title: "Microsoft Exchange Server Hafnium Attacks (2021)", description: "A state-sponsored threat actor exploited an SSRF vulnerability as the initial entry point in an attack chain against on-premises Microsoft Exchange Servers. This allowed the attacker to authenticate as the server itself, leading to remote code execution and mailbox access for tens of thousands of organizations." }
+                ],
+                prevention: [
+                    "Use a strict allow-list of the specific domains, IPs, protocols, and ports that the application is permitted to request.",
+                    "Validate and sanitize all user-supplied URLs. Do not use a deny-list approach.",
+                    "Disable unused URL schemes in the HTTP client (e.g., `file://`, `gopher://`).",
+                    "Disable HTTP redirections in the HTTP client to prevent bypasses.",
+                    "Isolate the URL fetching functionality in a separate, restricted network segment."
+                ],
+                cwes: [
+                    { id: "CWE-918", name: "Server-Side Request Forgery (SSRF)", description: "The web application can be induced to perform a request to a user-supplied URL, allowing an attacker to use the server as a proxy to access internal resources." }
+                ]
+            }
+        };
+
+        const navigation = document.getElementById('navigation');
+        const mainContent = document.getElementById('main-content');
+        const welcomeBtn = document.getElementById('welcome-btn');
+
+        function renderNavigation() {
+            const navItems = Object.keys(owaspData).map(key => {
+                const item = owaspData[key];
+                return `<a href="#" data-id="${key}" class="nav-item text-sm text-[#7a5f51] hover:bg-[#eaddd7] rounded-md p-2 mb-1 whitespace-nowrap md:whitespace-normal">${key}: ${item.title}</a>`;
+            }).join('');
+            navigation.innerHTML = navItems;
+        }
+
+        function renderContent(key) {
+            const item = owaspData[key];
+            if (!item) {
+                mainContent.innerHTML = `<div class="bg-white p-6 rounded-lg shadow-sm border border-[#eaddd7]"><p>Content not found.</p></div>`;
+                return;
+            }
+
+            const risksHtml = item.risks.map(risk => `
+                <li class="flex items-start mb-2">
+                    <span class="text-red-500 mr-3 mt-1 text-lg">⚠️</span>
+                    <span>${risk}</span>
+                </li>
+            `).join('');
+            
+            const attacksHtml = item.attacks.map((attack, index) => `
+                <div class="border-b border-[#eaddd7]">
+                    <button data-accordion-id="attack-${key}-${index}" class="accordion-toggle w-full text-left p-4 font-semibold text-[#5c3c2a] flex justify-between items-center hover:bg-[#f9f7f6]">
+                        <span>${attack.title}</span>
+                        <span class="transform transition-transform duration-300">▼</span>
+                    </button>
+                    <div id="accordion-attack-${key}-${index}" class="accordion-content px-4 pb-4 text-gray-700">
+                        <p>${attack.description}</p>
+                    </div>
+                </div>
+            `).join('');
+
+            const caseStudiesHtml = item.caseStudies.map((study, index) => `
+                <div class="border-b border-[#eaddd7]">
+                    <button data-accordion-id="case-${key}-${index}" class="accordion-toggle w-full text-left p-4 font-semibold text-[#5c3c2a] flex justify-between items-center hover:bg-[#f9f7f6]">
+                        <span>${study.title}</span>
+                        <span class="transform transition-transform duration-300">▼</span>
+                    </button>
+                    <div id="accordion-case-${key}-${index}" class="accordion-content px-4 pb-4 text-gray-700">
+                        <p>${study.description}</p>
+                    </div>
+                </div>
+            `).join('');
+
+            const preventionHtml = item.prevention.map(p => `
+                <li class="flex items-start mb-2">
+                    <span class="text-green-600 mr-2 mt-1">✔</span>
+                    <span>${p}</span>
+                </li>
+            `).join('');
+
+            const cwesHtml = item.cwes.map(cwe => `
+                <tr class="border-b border-[#eaddd7] hover:bg-[#f9f7f6]">
+                    <td class="p-3 text-sm font-mono align-top">${cwe.id}</td>
+                    <td class="p-3 text-sm align-top">${cwe.name}</td>
+                    <td class="p-3 text-sm text-gray-600 align-top">${cwe.description}</td>
+                </tr>
+            `).join('');
+
+            mainContent.innerHTML = `
+                <div class="bg-white p-6 rounded-lg shadow-sm border border-[#eaddd7]">
+                    <h2 class="text-3xl font-bold text-[#5c3c2a] mb-2">${key}: ${item.title}</h2>
+                    <div class="mb-6">
+                        <div class="inline-block bg-red-100 text-red-800 text-sm font-semibold px-3 py-1 rounded-full">
+                            Incidence Rate: ~${item.incidence}% of tested applications
+                        </div>
+                    </div>
+
+                    <div class="mb-6 border-b border-[#eaddd7]">
+                        <nav id="tabs" class="-mb-px flex space-x-4 overflow-x-auto">
+                            <button data-tab="overview" class="tab-item whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm text-gray-500 hover:text-[#a3785f] hover:border-gray-300 active">Overview</button>
+                            <button data-tab="risks" class="tab-item whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm text-gray-500 hover:text-[#a3785f] hover:border-gray-300">Risks & Impact</button>
+                            <button data-tab="attacks" class="tab-item whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm text-gray-500 hover:text-[#a3785f] hover:border-gray-300">Attack Scenarios</button>
+                            <button data-tab="cases" class="tab-item whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm text-gray-500 hover:text-[#a3785f] hover:border-gray-300">Case Studies</button>
+                            <button data-tab="prevention" class="tab-item whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm text-gray-500 hover:text-[#a3785f] hover:border-gray-300">Prevention</button>
+                            <button data-tab="cwes" class="tab-item whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm text-gray-500 hover:text-[#a3785f] hover:border-gray-300">Associated CWEs</button>
+                        </nav>
+                    </div>
+
+                    <div id="tab-content">
+                        <div id="overview-content" class="tab-panel"><h3 class="text-xl font-semibold text-[#5c3c2a] mb-3">What is ${item.title}?</h3><p class="text-gray-700 leading-relaxed">${item.overview}</p></div>
+                        <div id="risks-content" class="tab-panel hidden"><h3 class="text-xl font-semibold text-[#5c3c2a] mb-3">Business Risks & Impact</h3><ul class="text-gray-700 leading-relaxed">${risksHtml}</ul></div>
+                        <div id="attacks-content" class="tab-panel hidden"><h3 class="text-xl font-semibold text-[#5c3c2a] mb-3">Common Attack Scenarios</h3><div class="border border-[#eaddd7] rounded-lg overflow-hidden">${attacksHtml}</div></div>
+                        <div id="cases-content" class="tab-panel hidden"><h3 class="text-xl font-semibold text-[#5c3c2a] mb-3">Real-World Case Studies</h3><div class="border border-[#eaddd7] rounded-lg overflow-hidden">${caseStudiesHtml}</div></div>
+                        <div id="prevention-content" class="tab-panel hidden"><h3 class="text-xl font-semibold text-[#5c3c2a] mb-3">How to Prevent It</h3><ul class="text-gray-700 leading-relaxed">${preventionHtml}</ul></div>
+                        <div id="cwes-content" class="tab-panel hidden"><h3 class="text-xl font-semibold text-[#5c3c2a] mb-3">Key Associated CWEs</h3><div class="overflow-x-auto border border-[#eaddd7] rounded-lg"><table class="min-w-full bg-white"><thead class="bg-[#f4f1ee]"><tr><th class="p-3 w-1/6 text-left text-xs font-semibold text-[#5c3c2a] uppercase tracking-wider">CWE ID</th><th class="p-3 w-2/6 text-left text-xs font-semibold text-[#5c3c2a] uppercase tracking-wider">Name</th><th class="p-3 w-3/6 text-left text-xs font-semibold text-[#5c3c2a] uppercase tracking-wider">Description</th></tr></thead><tbody>${cwesHtml}</tbody></table></div></div>
+                    </div>
+                </div>
+            `;
+            attachTabAndAccordionListeners();
+        }
+        
+        function renderWelcome() {
+            mainContent.innerHTML = `
+                <div class="bg-white p-6 rounded-lg shadow-sm border border-[#eaddd7]">
+                    <h2 class="text-3xl font-bold text-[#5c3c2a] mb-2">Welcome to the Interactive OWASP Top 10</h2>
+                    <p class="text-gray-700 leading-relaxed mb-6">This dashboard provides an interactive way to explore the 2021 OWASP Top 10 web application security risks. The chart below shows the incidence rate—the percentage of tested applications having at least one vulnerability of that type. Click on a vulnerability from the navigation on the left to dive deeper into its definition, attack scenarios, and prevention strategies.</p>
+                    <div class="chart-container">
+                        <canvas id="overviewChart"></canvas>
+                    </div>
+                </div>
+            `;
+            renderOverviewChart();
+            navigation.querySelectorAll('.nav-item').forEach(link => link.classList.remove('active'));
+        }
+
+        function renderOverviewChart() {
+            const ctx = document.getElementById('overviewChart').getContext('2d');
+            if (!ctx) return;
+            const labels = Object.keys(owaspData).map(key => `${key}: ${owaspData[key].title}`);
+            const data = Object.values(owaspData).map(item => item.incidence);
+
+            new Chart(ctx, {
+                type: 'bar',
+                data: { labels: labels, datasets: [{ label: 'Incidence Rate (%)', data: data, backgroundColor: 'rgba(163, 120, 95, 0.6)', borderColor: 'rgba(163, 120, 95, 1)', borderWidth: 1 }] },
+                options: {
+                    responsive: true, maintainAspectRatio: false, indexAxis: 'y',
+                    scales: { x: { beginAtZero: true, max: 100, ticks: { callback: value => value + "%" } }, y: { ticks: { autoSkip: false, font: { size: 10 } } } },
+                    plugins: { legend: { display: false }, tooltip: { callbacks: { label: context => `Incidence: ${context.raw}%` } } }
+                }
+            });
+        }
+
+        function attachTabAndAccordionListeners() {
+            mainContent.addEventListener('click', e => {
+                const tabButton = e.target.closest('.tab-item');
+                const accordionButton = e.target.closest('.accordion-toggle');
+
+                if (tabButton) {
+                    const tabId = tabButton.dataset.tab;
+                    mainContent.querySelectorAll('.tab-item').forEach(tab => tab.classList.remove('active'));
+                    tabButton.classList.add('active');
+                    mainContent.querySelectorAll('.tab-panel').forEach(panel => panel.classList.add('hidden'));
+                    mainContent.querySelector(`#${tabId}-content`).classList.remove('hidden');
+                }
+
+                if (accordionButton) {
+                    const accordionId = accordionButton.dataset.accordionId;
+                    const content = document.getElementById(`accordion-${accordionId}`);
+                    const icon = accordionButton.querySelector('span:last-child');
+                    
+                    if (content.style.maxHeight) {
+                        content.style.maxHeight = null;
+                        icon.classList.remove('rotate-180');
+                    } else {
+                        content.style.maxHeight = content.scrollHeight + "px";
+                        icon.classList.add('rotate-180');
+                    }
+                }
+            });
+        }
+
+        navigation.addEventListener('click', e => {
+            e.preventDefault();
+            const navLink = e.target.closest('.nav-item');
+            if (navLink) {
+                const key = navLink.dataset.id;
+                navigation.querySelectorAll('.nav-item').forEach(link => link.classList.remove('active'));
+                navLink.classList.add('active');
+                renderContent(key);
+            }
+        });
+
+        welcomeBtn.addEventListener('click', e => {
+            e.preventDefault();
+            renderWelcome();
+        });
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            renderNavigation();
+            renderWelcome();
+            attachTabAndAccordionListeners();
+        });
+    </script>
+</body>
+</html>
